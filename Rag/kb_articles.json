@@ -1,0 +1,1077 @@
+{
+ "KB00001": {
+  "id": "KB00001",
+  "meta": {
+   "KB number": "KB00001",
+   "Title": "Integration Gateway - \"504 Gateway Timeout\"",
+   "Author": "Maria Koduya",
+   "Date issued": "December 3, 2025",
+   "Last updated": "May 16, 2026",
+   "Owning team": "Application Support (Integrations)",
+   "Escalation team": "Downstream service owner or third-party provider, when the slow service is outside the company",
+   "Related incidents": "INC-AIT-0036, INC-AIT-0049, INC-AIT-0056, INC-AIT-0058, INC-AIT-0064"
+  },
+  "sections": {
+   "Error messages": [
+    "504 Gateway Timeout",
+    "HTTP 504 Gateway Timeout",
+    "integration job failed: timeout",
+    "ETIMEDOUT",
+    "ERR_API_TIMEOUT",
+    "Request timed out after 30s"
+   ],
+   "Why this happens and why it comes back": [
+    "The downstream API (an internal service or a third-party provider) slows down during busy windows such as the nightly sync. Responses take longer than the Integration Gateway's client timeout, so the gateway returns 504. Fixed-interval retries then add more load, which keeps the downstream service slow. It comes back in the next busy window whenever downstream latency spikes and retry and backoff settings have not been tuned."
+   ],
+   "Team responsible": [
+    "Owning team: Application Support (Integrations)",
+    "Escalate to: Downstream service owner or third-party provider, when the slow service is outside the company"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Confirm the error is a timeout (504, ETIMEDOUT). If the logs show 401 or token_expired instead, use KB00002.",
+    "Record the affected integration or job names, the time window, and who is impacted (for example finance reports not updating).",
+    "Check monitoring and open incidents for a known downstream slowdown, and link the ticket to the parent incident if one exists.",
+    "Assign to Application Support (Integrations) with the job IDs, time window and error codes.",
+    "Application Support (Integrations)",
+    "Review gateway logs to confirm upstream timeouts rather than an application error, and rule out authentication failures (no 401 or 403).",
+    "Once downstream response times recover, re-run the failed jobs and confirm they complete.",
+    "If the slow service is external, open a case with the provider including the time window and the 504 pattern.",
+    "Change retries to exponential backoff with jitter and cap the retry count. Raise the timeout only if the downstream service level justifies it.",
+    "Add or confirm a latency alert for the downstream endpoint so the next slowdown is seen before jobs fail."
+   ],
+   "Workarounds if the steps do not work": [
+    "Re-run failed sync jobs manually after the busy window ends.",
+    "Move heavy sync jobs to a quieter time slot.",
+    "Temporarily raise the gateway timeout, with Application Support approval, and set a date to revert it.",
+    "Tell affected business users that data may be delayed and when it is expected to catch up.",
+    "KB00001  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00002": {
+  "id": "KB00002",
+  "meta": {
+   "KB number": "KB00002",
+   "Title": "Integration Gateway - \"401 Unauthorized - token_expired\"",
+   "Author": "Karen Liu",
+   "Date issued": "December 6, 2025",
+   "Last updated": "December 15, 2025",
+   "Owning team": "Application Support (Integrations)",
+   "Escalation team": "Platform or secrets management team, if the vault or secret store itself is failing",
+   "Related incidents": "INC-AIT-0002, INC-AIT-0005, INC-AIT-0017, INC-AIT-0029, INC-AIT-0050"
+  },
+  "sections": {
+   "Error messages": [
+    "401 Unauthorized - token_expired",
+    "401 Unauthorized",
+    "integration job retry exhaustion",
+    "Often followed by 504 Gateway Timeout and 429 Too Many Requests"
+   ],
+   "Why this happens and why it comes back": [
+    "The API token of the service account that the Integration Gateway uses has expired, usually because rotation was manual and the expiry alert was missed. Every call fails authentication, and the retries that follow cause timeouts and rate limiting downstream. It comes back each time the token reaches its expiry date unless rotation is automated."
+   ],
+   "Team responsible": [
+    "Owning team: Application Support (Integrations)",
+    "Escalate to: Platform or secrets management team, if the vault or secret store itself is failing"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Confirm the logs or error messages show 401 token_expired.",
+    "Record the affected integration, service account name (if shown) and the time the failures started.",
+    "Assign to Application Support (Integrations). Users cannot fix this themselves.",
+    "Application Support (Integrations)",
+    "Identify the service account and where its secret is stored (vault or Kubernetes secret).",
+    "Rotate the token and update the stored secret.",
+    "Restart the gateway workers so every instance loads the new secret.",
+    "Send a test call and confirm a 200 response, then re-run the queued or failed jobs.",
+    "Turn on automated rotation well before expiry (for example 7 to 14 days) and add an alert for upcoming token expiry.",
+    "Review retry settings so a future authentication failure does not turn into a retry storm."
+   ],
+   "Workarounds if the steps do not work": [
+    "Ask the downstream service owner for a short-lived temporary token until rotation is complete.",
+    "Pause scheduled jobs to stop the retry storm, then process the backlog after the new token is in place.",
+    "KB00002  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00003": {
+  "id": "KB00003",
+  "meta": {
+   "KB number": "KB00003",
+   "Title": "Active Directory - \"Account locked due to too many failed sign-in attempts\"",
+   "Author": "Rajesh Patel",
+   "Date issued": "November 20, 2025",
+   "Last updated": "May 8, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Identity and Access Management (IAM) if the lockout source cannot be found or the account keeps locking after cleanup; Desktop Support for removing the account from a managed phone",
+   "Related incidents": "INC-ALP-0008, INC-ALP-0015, INC-ALP-0017, INC-ALP-0055, INC-ALP-0065"
+  },
+  "sections": {
+   "Error messages": [
+    "Account locked due to too many failed sign-in attempts",
+    "Account locked",
+    "ERROR_ACCOUNT_LOCKED",
+    "0xC0000234",
+    "Event ID 4740 (An account was locked out)",
+    "Failed authentication events logged for user from mobile device"
+   ],
+   "Why this happens and why it comes back": [
+    "After a password change, the user's phone keeps trying the old saved password in the background (Outlook, Teams, Mail or browser saved passwords). Each failed attempt counts toward the lockout threshold, so the account locks again minutes after it is unlocked. It keeps coming back until the old password is removed from every device."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Identity and Access Management (IAM) if the lockout source cannot be found or the account keeps locking after cleanup; Desktop Support for removing the account from a managed phone"
+   ],
+   "Steps to resolve": [
+    "Verify the caller's identity according to the identity verification policy.",
+    "Find the lockout source: check the lockout details (Event ID 4740, caller computer or IP) and note the device. It is usually the user's phone.",
+    "Unlock the account.",
+    "Ask the user to remove or update the saved password on the phone: Outlook mobile, Teams, the built-in Mail app and browser saved passwords. Signing out and back in also works.",
+    "If the user also needs a new password, issue a reset (see KB00004).",
+    "Have the user sign in to the SSO portal from their computer first, then on the phone.",
+    "Stay on the line or check back after 15 to 30 minutes for new failed attempts from the same source. If they continue, escalate to IAM with the source device and IP."
+   ],
+   "Workarounds if the steps do not work": [
+    "Have the user turn off mail and Teams on the phone (or sign out) until the old password is cleared.",
+    "Desktop Support can remove the corporate account from a managed phone remotely through Intune.",
+    "KB00003  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00004": {
+  "id": "KB00004",
+  "meta": {
+   "KB number": "KB00004",
+   "Title": "Password Reset Portal - \"Password reset token expired\"",
+   "Author": "Marcus Kaplan",
+   "Date issued": "November 22, 2025",
+   "Last updated": "May 10, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Identity and Access Management (IAM) if new links expire immediately or the portal is failing",
+   "Related incidents": "INC-ALP-0010, INC-ALP-0021, INC-ALP-0032, INC-ALP-0048, INC-ALP-V0006"
+  },
+  "sections": {
+   "Error messages": [
+    "Password reset token expired",
+    "SSO authentication failure: invalid credentials",
+    "AD error: account locked (event id 4740)"
+   ],
+   "Why this happens and why it comes back": [
+    "Reset links are valid only for a short time (for example 15 minutes). Users open the link late, or use an older email after requesting several links, so the new password is never set. The old password keeps being used, which often leads to a lockout. It comes back whenever users are not told to use the newest link right away."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Identity and Access Management (IAM) if new links expire immediately or the portal is failing"
+   ],
+   "Steps to resolve": [
+    "Verify the caller's identity according to the identity verification policy.",
+    "Check the portal for several outstanding reset requests and cancel the old ones.",
+    "Issue one new reset link and tell the user to open the newest email immediately.",
+    "Stay on the call while the user sets the new password, and confirm it was accepted.",
+    "Check whether the account is locked. If it is, follow KB00003.",
+    "Have the user sign in to the SSO portal to confirm the new password works.",
+    "If brand-new links also show as expired, escalate to IAM. The portal's clock or token lifetime setting may be wrong."
+   ],
+   "Workarounds if the steps do not work": [
+    "Reset the password from the admin console with a temporary password that must be changed at next sign-in, after identity verification.",
+    "Let the user reset through security questions if those are enrolled.",
+    "KB00004  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00005": {
+  "id": "KB00005",
+  "meta": {
+   "KB number": "KB00005",
+   "Title": "Internal Web Service - \"NET::ERR_CERT_DATE_INVALID\"",
+   "Author": "David Okafor",
+   "Date issued": "December 14, 2025",
+   "Last updated": "May 11, 2026",
+   "Owning team": "Network Operations",
+   "Escalation team": "Application team for the affected service, and the certificate (PKI) team",
+   "Related incidents": "INC-CES-0024, INC-CES-0029, INC-CES-0041, INC-CES-0048, INC-CES-0064"
+  },
+  "sections": {
+   "Error messages": [
+    "NET::ERR_CERT_DATE_INVALID",
+    "ERR_CERT_DATE_INVALID",
+    "TLS handshake failure",
+    "TLS handshake failed",
+    "certificate expired",
+    "CERT_HAS_EXPIRED",
+    "ERR_SSL_PROTOCOL_ERROR"
+   ],
+   "Why this happens and why it comes back": [
+    "The TLS certificate on an internal service or its load balancer has expired. Either renewal did not run, or the renewed certificate and its full intermediate chain were never deployed to the load balancer, and expiry monitoring was off. It comes back every year at expiry unless renewal and deployment are automated and checked. Because many users are affected at once, treat it as a possible major incident."
+   ],
+   "Team responsible": [
+    "Owning team: Network Operations",
+    "Escalate to: Application team for the affected service, and the certificate (PKI) team"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Confirm the browser error and the site address. Open the certificate details in the browser and note the expiry date.",
+    "Check whether other users report the same site. If several do, link to the parent incident or alert the major incident manager.",
+    "Assign to Network Operations with the address, error text and expiry date.",
+    "Tell users not to click through the warning.",
+    "Network Operations",
+    "Get a renewed certificate from the internal certificate authority, using emergency issuance if needed.",
+    "Install the certificate and the full intermediate chain on the load balancer, then reload the configuration on every node.",
+    "Check the served certificate's dates and chain, for example with openssl s_client -connect host:443.",
+    "Confirm users can connect, then turn expiry monitoring back on with alerts at 30, 14 and 7 days.",
+    "Update the renewal runbook so deployment to the load balancer is verified after every renewal."
+   ],
+   "Workarounds if the steps do not work": [
+    "There is no safe workaround for users. They must not bypass the certificate warning.",
+    "If the service owner approves, use an alternate address for the same service while the fix is deployed, and share the expected time to fix.",
+    "KB00005  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00006": {
+  "id": "KB00006",
+  "meta": {
+   "KB number": "KB00006",
+   "Title": "Company Portal (Intune) - \"Device compliance state: Noncompliant\"",
+   "Author": "Marcus Reeves",
+   "Date issued": "December 26, 2025",
+   "Last updated": "May 19, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Desktop Support if the device stays noncompliant after two syncs; Endpoint Management (Intune administrators) for policy problems",
+   "Related incidents": "INC-DCP-0005, INC-DCP-0014, INC-DCP-0036, INC-DCP-0055, INC-DCP-0065"
+  },
+  "sections": {
+   "Error messages": [
+    "Device compliance state: Noncompliant",
+    "Company Portal status: Not Compliant",
+    "Conditional Access blocked sign-in to Exchange Online",
+    "Compliance check failed: missing encryption signal",
+    "Policy evaluation: encryption signal missing"
+   ],
+   "Why this happens and why it comes back": [
+    "The device has not checked in with Intune for several days, so compliance is judged on old data (for example a missing encryption signal). Conditional Access then blocks Outlook, SharePoint and other apps. It comes back whenever a device goes days without checking in, for example when it is kept offline, asleep or the management agent is stuck."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Desktop Support if the device stays noncompliant after two syncs; Endpoint Management (Intune administrators) for policy problems"
+   ],
+   "Steps to resolve": [
+    "In Intune, check the device's last check-in time and which compliance setting is failing.",
+    "Have the user sync: Company Portal, select the device, then Check status. On Windows you can also use Settings, Accounts, Access work or school, Info, Sync.",
+    "Restart the device, sync again and allow up to 15 minutes for re-evaluation.",
+    "If the failing setting is encryption, check BitLocker with manage-bde -status. If it is off, follow KB00010.",
+    "Confirm the device shows Compliant in Intune and the user can sign in.",
+    "If it is still noncompliant after two syncs, escalate to Desktop Support with the device name and Company Portal screenshots. If the device shows a retired policy, see KB00007."
+   ],
+   "Workarounds if the steps do not work": [
+    "Let the user work from another compliant device for now.",
+    "Do not request compliance exceptions without Security approval.",
+    "KB00006  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00007": {
+  "id": "KB00007",
+  "meta": {
+   "KB number": "KB00007",
+   "Title": "Intune - \"Intune sync error: stale policy reference found\"",
+   "Author": "Maria Koduya",
+   "Date issued": "December 30, 2025",
+   "Last updated": "May 18, 2026",
+   "Owning team": "Endpoint Management (Intune administrators)",
+   "Escalation team": "Security, if a temporary exclusion is needed",
+   "Related incidents": "INC-DCP-0003, INC-DCP-0033, INC-DCP-0043, INC-DCP-0063, INC-DCP-V0035"
+  },
+  "sections": {
+   "Error messages": [
+    "Intune sync error: stale policy reference found",
+    "Conditional Access blocked sign-in due to noncompliant device",
+    "Compliance check failed: missing encryption signal"
+   ],
+   "Why this happens and why it comes back": [
+    "After compliance policies were consolidated, a retired policy (for example RequireEncryption_v1) is still assigned through an old group mapping. Devices are evaluated against both the current and the retired policy, and the retired one fails. It comes back after policy changes whenever old assignments are not cleaned up."
+   ],
+   "Team responsible": [
+    "Owning team: Endpoint Management (Intune administrators)",
+    "Escalate to: Security, if a temporary exclusion is needed"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Collect the device name, user, Company Portal screenshot and the list of failing policies.",
+    "Try one manual sync from Company Portal.",
+    "If the device lists more than one compliance policy, or a retired policy (v1, Legacy), escalate to the Intune administrators. Service Desk cannot change policy assignments.",
+    "Check whether other users in the same group report the same problem. Several users points to a policy change and a possible major incident.",
+    "Endpoint Management (Intune administrators)",
+    "Review compliance policy assignments and remove the stale targeting.",
+    "Make sure only the current policy applies to the group, then force a sync on affected devices.",
+    "Confirm devices return to Compliant, and add an assignment review step to the policy change process."
+   ],
+   "Workarounds if the steps do not work": [
+    "Security can approve a temporary exclusion group with an end date.",
+    "The user can work from another compliant device until the assignment is fixed.",
+    "KB00007  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00008": {
+  "id": "KB00008",
+  "meta": {
+   "KB number": "KB00008",
+   "Title": "Internal DNS - \"NXDOMAIN\"",
+   "Author": "Karen Liu",
+   "Date issued": "January 7, 2026",
+   "Last updated": "January 22, 2026",
+   "Owning team": "Network Operations",
+   "Escalation team": "Application owner, to confirm the correct address of the service",
+   "Related incidents": "INC-DRF-0034, INC-DRF-0049, INC-DRF-0058, INC-DRF-0062, INC-DRF-0063"
+  },
+  "sections": {
+   "Error messages": [
+    "NXDOMAIN",
+    "NXDOMAIN returned intermittently",
+    "name not found",
+    "cached A record (old)",
+    "DNS query timed out"
+   ],
+   "Why this happens and why it comes back": [
+    "After a DNS record change or a new service, one internal resolver keeps old data: either a cached \"does not exist\" answer, or an old address pointing to a retired server. Lookups fail on and off depending on which resolver answers. Long cache times make it come back after each change."
+   ],
+   "Team responsible": [
+    "Owning team: Network Operations",
+    "Escalate to: Application owner, to confirm the correct address of the service"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Run nslookup for the name on the user's computer and note which resolver answered and what it returned.",
+    "Run ipconfig /flushdns and try again.",
+    "If it still fails or answers differently each time, query each resolver directly (nslookup name resolver-ip).",
+    "Escalate to Network Operations with the name, the expected address, which resolver is wrong and the user's site. If several users are affected, alert the major incident manager.",
+    "Network Operations",
+    "Check the authoritative record and zone serial, and correct the record if it is wrong.",
+    "Flush the cache on the affected resolvers, and restart the resolver service if the cache will not clear.",
+    "Check zone transfer and replication between resolvers.",
+    "Test from several subnets and sites, review the record's cache time (TTL), and document the change."
+   ],
+   "Workarounds if the steps do not work": [
+    "Flush the client DNS cache and retry.",
+    "A temporary hosts-file entry only with Network Operations approval, removed once fixed.",
+    "Use an alternate address supplied by the application owner.",
+    "KB00008  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00009": {
+  "id": "KB00009",
+  "meta": {
+   "KB number": "KB00009",
+   "Title": "Internal DNS - \"SERVFAIL\"",
+   "Author": "Rajesh Patel",
+   "Date issued": "January 6, 2026",
+   "Last updated": "May 16, 2026",
+   "Owning team": "Network Operations",
+   "Escalation team": "None; Network Operations resolves",
+   "Related incidents": "INC-DRF-0012, INC-DRF-0018, INC-DRF-0022, INC-DRF-0025, INC-DRF-0060"
+  },
+  "sections": {
+   "Error messages": [
+    "SERVFAIL",
+    "DNS query timeout",
+    "DNS lookup timed out",
+    "NXDOMAIN from one resolver only"
+   ],
+   "Why this happens and why it comes back": [
+    "A resolver cannot reach the authoritative source for an internal zone, usually because a conditional forwarder is missing or wrong on one resolver cluster, or the zone is not refreshing. Lookups fail or time out from some sites only. It comes back when resolver settings drift apart between clusters."
+   ],
+   "Team responsible": [
+    "Owning team: Network Operations",
+    "Escalate to: None; Network Operations resolves"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Run nslookup from the user's computer and note the resolver and the answer.",
+    "Test the same name from another site, or against another resolver, to see if only one path fails.",
+    "Escalate to Network Operations with the name, failing resolver and site.",
+    "Network Operations",
+    "Check the conditional forwarders for the zone on every resolver cluster and correct the one that differs.",
+    "Confirm the resolvers can reach the authoritative servers on port 53 (UDP and TCP).",
+    "Reload the resolver and test from all affected sites.",
+    "Add a configuration consistency check so resolver clusters stay aligned."
+   ],
+   "Workarounds if the steps do not work": [
+    "With Network Operations approval, point affected clients to a working resolver until the fix is in place.",
+    "KB00009  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00010": {
+  "id": "KB00010",
+  "meta": {
+   "KB number": "KB00010",
+   "Title": "BitLocker (Intune) - \"TPM protector not initialized\"",
+   "Author": "Marcus Kaplan",
+   "Date issued": "January 18, 2026",
+   "Last updated": "May 13, 2026",
+   "Owning team": "Desktop Support",
+   "Escalation team": "Endpoint Management (Intune administrators) if an old encryption policy is also assigned",
+   "Related incidents": "INC-EDE-0036, INC-EDE-0054, INC-EDE-0060, INC-EDE-0062, INC-EDE-V0025"
+  },
+  "sections": {
+   "Error messages": [
+    "TPM protector not initialized",
+    "TPM not initialized",
+    "BitLocker: Protection Off",
+    "BitLocker state: Not enabled",
+    "TPM initialization error during protector creation"
+   ],
+   "Why this happens and why it comes back": [
+    "The laptop has a TPM chip, but it was not initialized during setup, so BitLocker cannot create its TPM protector. Encryption never starts and the device is marked noncompliant. It comes back on newly imaged devices when setup skips TPM initialization or the TPM is turned off in the firmware."
+   ],
+   "Team responsible": [
+    "Owning team: Desktop Support",
+    "Escalate to: Endpoint Management (Intune administrators) if an old encryption policy is also assigned"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Confirm in Intune that encryption is the failing compliance setting.",
+    "In a remote session, run manage-bde -status and Get-Tpm. If TpmReady is False, assign to Desktop Support.",
+    "Desktop Support",
+    "Check that the TPM is enabled in the BIOS or UEFI settings.",
+    "Run Initialize-Tpm in an elevated session and confirm TpmReady is True.",
+    "Start encryption (manage-bde -on C:) or let the policy apply, and confirm encryption is in progress.",
+    "Back up the recovery key to Entra ID or Intune (BackupToAAD-BitLockerKeyProtector) and confirm the key appears on the device record.",
+    "Sync the device in Company Portal and confirm it returns to Compliant."
+   ],
+   "Workarounds if the steps do not work": [
+    "The device still works but is blocked from protected apps. Offer a compliant loaner laptop if the user is blocked from working.",
+    "Do not turn off compliance checks for the device.",
+    "KB00010  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00011": {
+  "id": "KB00011",
+  "meta": {
+   "KB number": "KB00011",
+   "Title": "BitLocker (Intune) - \"Recovery key not escrowed\"",
+   "Author": "David Okafor",
+   "Date issued": "January 18, 2026",
+   "Last updated": "May 14, 2026",
+   "Owning team": "Desktop Support",
+   "Escalation team": "Security, if backup keeps failing",
+   "Related incidents": "INC-EDE-0003, INC-EDE-0016, INC-EDE-0043, INC-EDE-0051, INC-EDE-0054"
+  },
+  "sections": {
+   "Error messages": [
+    "Recovery key not escrowed",
+    "Intune: No recovery key found for device",
+    "Recovery key not found"
+   ],
+   "Why this happens and why it comes back": [
+    "Encryption may be on, but the recovery key was never backed up to Intune or Entra ID, often because the protector was created before the policy applied or the TPM had a problem. The device is flagged noncompliant, and if the user is ever locked out there is no key to unlock it. It comes back when backup failures are not monitored."
+   ],
+   "Team responsible": [
+    "Owning team: Desktop Support",
+    "Escalate to: Security, if backup keeps failing"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Confirm in Intune that no recovery key is stored for the device, and assign to Desktop Support.",
+    "Desktop Support",
+    "Check the protectors with manage-bde -protectors -get C:. If there is no TPM protector, follow KB00010 first.",
+    "Create a new recovery password and back it up (BackupToAAD-BitLockerKeyProtector).",
+    "Confirm the key ID now appears on the device record in Intune.",
+    "Sync the device and confirm it returns to Compliant."
+   ],
+   "Workarounds if the steps do not work": [
+    "No user workaround. Back up the key before the user travels or goes offline for long.",
+    "If backup keeps failing, Security may approve storing the key in the secured vault manually.",
+    "KB00011  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00012": {
+  "id": "KB00012",
+  "meta": {
+   "KB number": "KB00012",
+   "Title": "Windows laptop - \"MsMpEng.exe high CPU after login\"",
+   "Author": "Marcus Reeves",
+   "Date issued": "January 31, 2026",
+   "Last updated": "May 13, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Desktop Support; Endpoint Security owns the scan schedule",
+   "Related incidents": "INC-LPD-0004, INC-LPD-0025, INC-LPD-0041, INC-LPD-0047, INC-LPD-0054"
+  },
+  "sections": {
+   "Error messages": [
+    "MsMpEng.exe CPU spike to ~95% after login",
+    "CPU usage > 90% within 2 minutes of login",
+    "Disk I/O spike during startup",
+    "Delayed application launch times (10-30s)"
+   ],
+   "Why this happens and why it comes back": [
+    "Microsoft Defender has a backlog of queued full scans (often after a definition or policy update) that run at sign-in and compete with startup apps. It comes back after updates whenever full scans are scheduled during working hours."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Desktop Support; Endpoint Security owns the scan schedule"
+   ],
+   "Steps to resolve": [
+    "In Task Manager, confirm MsMpEng.exe is the top CPU user for several minutes after sign-in.",
+    "Check Defender for queued or running scans (Windows Security, Virus and threat protection, or Get-MpComputerStatus).",
+    "Let the current scan finish. Never turn off or end Defender.",
+    "Refresh device policy (Company Portal sync, or machine policy retrieval in Configuration Manager).",
+    "Restart and check CPU again after sign-in.",
+    "If many devices show this after the same update, escalate to Endpoint Security to move full scans out of working hours."
+   ],
+   "Workarounds if the steps do not work": [
+    "Leave the laptop on and connected overnight so queued scans finish.",
+    "Wait a few minutes after sign-in before opening heavy apps.",
+    "KB00012  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00013": {
+  "id": "KB00013",
+  "meta": {
+   "KB number": "KB00013",
+   "Title": "Windows laptop - \"Free disk space <5% on C:\"",
+   "Author": "Maria Koduya",
+   "Date issued": "January 30, 2026",
+   "Last updated": "May 12, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Desktop Support for hardware or operating system faults",
+   "Related incidents": "INC-LPD-0004, INC-LPD-0031, INC-LPD-0047, INC-LPD-0057, INC-LPD-0059"
+  },
+  "sections": {
+   "Error messages": [
+    "Free disk space reported <5% on C:",
+    "Disk utilization 98%",
+    "Applications taking 20-60 seconds to become responsive",
+    "Long application launch times observed (30-120s)"
+   ],
+   "Why this happens and why it comes back": [
+    "Temporary files, browser caches and old update packages fill the C: drive, and many apps start at sign-in. With little free space Windows slows down. It comes back as caches grow again if no cleanup policy is in place."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Desktop Support for hardware or operating system faults"
+   ],
+   "Steps to resolve": [
+    "Check free space on C:.",
+    "Run Disk Cleanup including system files (Windows Update cleanup), or turn on Storage Sense.",
+    "Clear temporary files and the browser cache.",
+    "Turn off non-essential startup apps in Task Manager, Startup apps, following the approved list.",
+    "Turn on OneDrive Files On-Demand so synced files do not take local space.",
+    "Restart and check performance. If the disk fills again quickly or shows hardware errors, escalate to Desktop Support."
+   ],
+   "Workarounds if the steps do not work": [
+    "Move large personal files to OneDrive.",
+    "Turn on Storage Sense so cleanup runs automatically.",
+    "KB00013  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00014": {
+  "id": "KB00014",
+  "meta": {
+   "KB number": "KB00014",
+   "Title": "Outlook Desktop - \"Outlook status: Disconnected\"",
+   "Author": "Karen Liu",
+   "Date issued": "February 14, 2026",
+   "Last updated": "February 24, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Desktop Support; Messaging and Collaboration if mail is missing in Outlook on the web too",
+   "Related incidents": "INC-OES-0010, INC-OES-0014, INC-OES-0050, INC-OES-0051, INC-OES-0055"
+  },
+  "sections": {
+   "Error messages": [
+    "Outlook status: Disconnected",
+    "Outlook shows 'Disconnected'",
+    "Last synced: never (Inbox)",
+    "Sync/Send does not retrieve new messages",
+    "0x800CCC0E",
+    "0x8004010F"
+   ],
+   "Why this happens and why it comes back": [
+    "A damaged local mail cache (OST file) or an outdated Outlook profile stops the desktop app from keeping its connection to Exchange Online, even though mail is arriving (it shows in Outlook on the web). It comes back after Office updates or password changes when the profile is not rebuilt cleanly."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Desktop Support; Messaging and Collaboration if mail is missing in Outlook on the web too"
+   ],
+   "Steps to resolve": [
+    "Check Outlook on the web. If new mail is missing there as well, it is a mailbox problem: escalate to Messaging and Collaboration.",
+    "Check the Microsoft 365 service health page for an active incident.",
+    "Start Outlook in safe mode (outlook.exe /safe) to rule out add-ins.",
+    "Create a new Outlook profile (Control Panel, Mail, Show Profiles, Add) and set it as the default, or rename the OST file so it rebuilds.",
+    "Let the first sync finish and confirm new mail appears.",
+    "If Outlook keeps asking for a password, remove the Office entries from Credential Manager and sign in again."
+   ],
+   "Workarounds if the steps do not work": [
+    "Use Outlook on the web in a browser.",
+    "Use Outlook mobile on a compliant phone.",
+    "KB00014  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00015": {
+  "id": "KB00015",
+  "meta": {
+   "KB number": "KB00015",
+   "Title": "Outlook Mobile - \"Mobile sync failed - 403 (device compliance blocked)\"",
+   "Author": "Rajesh Patel",
+   "Date issued": "February 13, 2026",
+   "Last updated": "May 21, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Desktop Support for compliance; Messaging and Collaboration to remove a stale device partnership",
+   "Related incidents": "INC-OES-0009, INC-OES-0014, INC-OES-0028, INC-OES-0050, INC-OES-V0044"
+  },
+  "sections": {
+   "Error messages": [
+    "Mobile sync failed - 403 (device compliance blocked)",
+    "ActiveSync sync failure",
+    "Outlook mobile stopped syncing after a phone OS update"
+   ],
+   "Why this happens and why it comes back": [
+    "The phone fell out of Intune compliance (for example after an OS update or a passcode change), or its mobile sync partnership became stale after an update, so Exchange Online refuses the connection. It comes back after phone OS updates."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Desktop Support for compliance; Messaging and Collaboration to remove a stale device partnership"
+   ],
+   "Steps to resolve": [
+    "Check the phone's compliance in Intune. If it is noncompliant, fix that first (KB00006).",
+    "In Outlook mobile, open Settings, select the account and choose Reset account.",
+    "If it still fails, remove the account from Outlook mobile and add it again.",
+    "If that fails, escalate to Messaging and Collaboration to remove the stale mobile device partnership, then add the account again.",
+    "Confirm mail syncs on the phone and the desktop."
+   ],
+   "Workarounds if the steps do not work": [
+    "Use Outlook on the web on the computer.",
+    "Use Outlook on the web in the phone's browser if Conditional Access allows it.",
+    "KB00015  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00016": {
+  "id": "KB00016",
+  "meta": {
+   "KB number": "KB00016",
+   "Title": "Print Spooler - \"Driver unavailable\"",
+   "Author": "Marcus Kaplan",
+   "Date issued": "February 23, 2026",
+   "Last updated": "May 12, 2026",
+   "Owning team": "Desktop Support",
+   "Escalation team": "None; Desktop Support owns the print servers",
+   "Related incidents": "INC-PDQ-0008, INC-PDQ-0016, INC-PDQ-0034, INC-PDQ-0045, INC-PDQ-0046"
+  },
+  "sections": {
+   "Error messages": [
+    "Driver unavailable",
+    "printer offline",
+    "Print spooler service hung",
+    "EventID 7011: Service timeout while waiting for Print Spooler",
+    "Job status: Spooling (never completes)",
+    "Print jobs queued at 0%"
+   ],
+   "Why this happens and why it comes back": [
+    "The printer driver package on the print server is damaged or the wrong version after a driver push or Windows update, and printer queues still point to it. The spooler keeps crashing and jobs never print. Everyone using the same queue is affected. It comes back after driver pushes that were not tested first."
+   ],
+   "Team responsible": [
+    "Owning team: Desktop Support",
+    "Escalate to: None; Desktop Support owns the print servers"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Check whether other users on the same printer are affected. If so, link to or open a parent incident.",
+    "On the user's computer, remove the printer and add it again from the print server.",
+    "Clear the local queue and restart the local Print Spooler service (services.msc).",
+    "If \"driver unavailable\" continues, or several users are affected, assign to Desktop Support with the printer and server name.",
+    "Desktop Support",
+    "Check spooler events on the print server (Event ID 7011, spooler crashes).",
+    "Reinstall the approved driver package and confirm its version.",
+    "Point the affected queues to the correct driver, restart the spooler and clear stuck jobs.",
+    "Print a test page, and test new drivers on a pilot group before future pushes."
+   ],
+   "Workarounds if the steps do not work": [
+    "Print to a nearby printer that uses a different queue.",
+    "Save as PDF and print later.",
+    "KB00016  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00017": {
+  "id": "KB00017",
+  "meta": {
+   "KB number": "KB00017",
+   "Title": "Windows File Share - \"Access is denied\"",
+   "Author": "David Okafor",
+   "Date issued": "March 10, 2026",
+   "Last updated": "May 14, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Identity and Access Management (IAM) for group membership (data owner approval required); Desktop Support or the file server team for folder permissions",
+   "Related incidents": "INC-SDA-0025, INC-SDA-0034, INC-SDA-0045, INC-SDA-0059, INC-SDA-V0029"
+  },
+  "sections": {
+   "Error messages": [
+    "Access is denied",
+    "Access Denied",
+    "0x80070005",
+    "NT_STATUS_ACCESS_DENIED"
+   ],
+   "Why this happens and why it comes back": [
+    "Most often the user is not in the Active Directory security group that grants access to the share, either because it was missed during onboarding or removed in a cleanup. Group changes only take effect after the user signs in again. Less often the group is missing from the folder's permissions because inheritance broke. It comes back after directory cleanups and folder moves."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Identity and Access Management (IAM) for group membership (data owner approval required); Desktop Support or the file server team for folder permissions"
+   ],
+   "Steps to resolve": [
+    "Confirm the path and the exact error, and check whether a teammate can open the same folder.",
+    "Check the user's group membership in Active Directory against the group the share requires (from the share documentation or its owner).",
+    "If the group is missing, raise an access request. The data owner approves and IAM adds the user.",
+    "After the change, have the user sign out and back in (or run klist purge) and reconnect the drive.",
+    "If the user is in the right group but still denied, check effective access on the folder and escalate to the file server team to fix the permissions."
+   ],
+   "Workarounds if the steps do not work": [
+    "The folder owner can share the needed files through OneDrive or Teams for now.",
+    "Never give an individual user direct permissions to work around the group.",
+    "KB00017  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00018": {
+  "id": "KB00018",
+  "meta": {
+   "KB number": "KB00018",
+   "Title": "Windows File Share - \"Mapped drive repeatedly prompts for credentials\"",
+   "Author": "Marcus Reeves",
+   "Date issued": "March 7, 2026",
+   "Last updated": "May 17, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Identity and Access Management (IAM) if the account is locked or access is missing",
+   "Related incidents": "INC-SDA-0016, INC-SDA-0032, INC-SDA-0057, INC-SDA-0061, INC-SDA-V0030"
+  },
+  "sections": {
+   "Error messages": [
+    "Mapped drive repeatedly prompts for credentials",
+    "Mapped drive prompts for credentials",
+    "Mapped drive credential prompt"
+   ],
+   "Why this happens and why it comes back": [
+    "Windows Credential Manager still holds the old password for the file server after a password change, and the drive was mapped with those saved credentials, so every connection attempt fails and Windows asks again. It comes back after each password change."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Identity and Access Management (IAM) if the account is locked or access is missing"
+   ],
+   "Steps to resolve": [
+    "Open Credential Manager, Windows Credentials, and remove the entries for the file server.",
+    "Disconnect the drive (net use X: /delete).",
+    "Have the user sign out and back in.",
+    "Map the drive again without saving separate credentials, so it uses the user's normal sign-in.",
+    "If prompts continue, check for an account lockout (KB00003) or missing access (KB00017)."
+   ],
+   "Workarounds if the steps do not work": [
+    "Open the share using its full path (\\\\server\\share) instead of the mapped letter.",
+    "Use OneDrive or Teams for urgent files.",
+    "KB00018  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00019": {
+  "id": "KB00019",
+  "meta": {
+   "KB number": "KB00019",
+   "Title": "Software Center - \"Installation blocked by Endpoint Protection\"",
+   "Author": "Maria Koduya",
+   "Date issued": "March 21, 2026",
+   "Last updated": "May 10, 2026",
+   "Owning team": "Endpoint Security",
+   "Escalation team": "Desktop Support for redeploying the app",
+   "Related incidents": "INC-SIB-0020, INC-SIB-0021, INC-SIB-0038, INC-SIB-0043, INC-SIB-V0003"
+  },
+  "sections": {
+   "Error messages": [
+    "Installation blocked by Endpoint Protection",
+    "Installation blocked by Endpoint Protection policy",
+    "Installation blocked by Endpoint Protection (Policy: BlockUnapprovedInstall)",
+    "0x80070005"
+   ],
+   "Why this happens and why it comes back": [
+    "Application control blocks the installer because the approved app's publisher, signature or file hash is not on the allow list, for example after a new version or re-signed installer was released. It comes back with each new app version until the allow list is updated."
+   ],
+   "Team responsible": [
+    "Owning team: Endpoint Security",
+    "Escalate to: Desktop Support for redeploying the app"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Confirm the app is approved in the software catalogue.",
+    "Capture the block event: policy name, file name, version and hash from the Defender or application control log.",
+    "Escalate to Endpoint Security with these details so the allow list can be updated.",
+    "Endpoint Security",
+    "Review the block and add the approved publisher or hash to the allow list.",
+    "Refresh device policy, have the user retry the install and confirm it completes."
+   ],
+   "Workarounds if the steps do not work": [
+    "No workaround. Do not turn off protection or use admin rights to get around the block.",
+    "Install the previously approved version if the business needs the app right away.",
+    "KB00019  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00020": {
+  "id": "KB00020",
+  "meta": {
+   "KB number": "KB00020",
+   "Title": "Software Center - \"Application not visible in Software Center\"",
+   "Author": "Karen Liu",
+   "Date issued": "March 18, 2026",
+   "Last updated": "May 9, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Identity and Access Management (IAM) or the app owner for group membership; Desktop Support for urgent deployments",
+   "Related incidents": "INC-SIB-0007, INC-SIB-0011, INC-SIB-0027, INC-SIB-0059, INC-SIB-0062"
+  },
+  "sections": {
+   "Error messages": [
+    "Application not visible in Software Center",
+    "Entitlement check failed: user/device not authorized to install this application",
+    "Installation blocked by policy (entitlement_missing)"
+   ],
+   "Why this happens and why it comes back": [
+    "The user or device is not in the group the app is deployed to, or the device's inventory is out of date so targeting has not been re-evaluated. It comes back for new hires and people changing roles."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Identity and Access Management (IAM) or the app owner for group membership; Desktop Support for urgent deployments"
+   ],
+   "Steps to resolve": [
+    "Check whether the user or device is in the app's deployment group.",
+    "If not, raise an access request for manager or app owner approval.",
+    "After the group change, refresh the device: Configuration Manager actions (Machine Policy Retrieval, Application Deployment Evaluation) or a Company Portal sync.",
+    "Allow up to 60 minutes, refresh Software Center and install.",
+    "If the app still does not appear, escalate to Desktop Support with the device name and group."
+   ],
+   "Workarounds if the steps do not work": [
+    "For an urgent business need, Desktop Support can deploy directly to the device after approval.",
+    "KB00020  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00021": {
+  "id": "KB00021",
+  "meta": {
+   "KB number": "KB00021",
+   "Title": "Okta SSO - \"MFA_PROMPT_LOOP\"",
+   "Author": "Rajesh Patel",
+   "Date issued": "April 3, 2026",
+   "Last updated": "April 12, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Identity and Access Management (IAM) for factor resets if not delegated to the Service Desk, and for issues affecting many users",
+   "Related incidents": "INC-SML-0002, INC-SML-0005, INC-SML-0015, INC-SML-0026, INC-SML-0047"
+  },
+  "sections": {
+   "Error messages": [
+    "MFA_PROMPT_LOOP",
+    "MFA prompt loop",
+    "Repeated MFA challenges without successful assertion",
+    "SSO token not issued after MFA",
+    "factor_mismatch"
+   ],
+   "Why this happens and why it comes back": [
+    "The user's MFA enrollment is out of date or duplicated (for example after a phone change or a directory sync), or the authenticator app's clock has drifted. Verification never completes, so apps such as Salesforce, Confluence, Concur and Workday ask for MFA again and again. It comes back after phone changes and sync jobs."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Identity and Access Management (IAM) for factor resets if not delegated to the Service Desk, and for issues affecting many users"
+   ],
+   "Steps to resolve": [
+    "Confirm the loop and which apps are affected.",
+    "Check that the phone's date and time are set automatically.",
+    "Verify the user's identity, then check their MFA factors in Okta (or ask IAM) for duplicates or an old phone.",
+    "Reset the MFA factor and have the user enroll the authenticator again.",
+    "Have the user clear browser cookies or use a private window, then sign in.",
+    "If many users report it at once, escalate to IAM and alert the major incident manager. A sync job is the likely cause."
+   ],
+   "Workarounds if the steps do not work": [
+    "Use an alternate factor (phone call or SMS) if policy allows.",
+    "Only IAM can grant a temporary MFA bypass, with approval and an end time.",
+    "KB00021  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00022": {
+  "id": "KB00022",
+  "meta": {
+   "KB number": "KB00022",
+   "Title": "Entra ID Conditional Access - \"AUTH_401_MFA_REQUIRED\"",
+   "Author": "Marcus Kaplan",
+   "Date issued": "April 4, 2026",
+   "Last updated": "May 16, 2026",
+   "Owning team": "Identity and Access Management (IAM)",
+   "Escalation team": "Major incident manager if a whole group is blocked",
+   "Related incidents": "INC-SML-0005, INC-SML-0010, INC-SML-0042, INC-SML-0058, INC-SML-0062"
+  },
+  "sections": {
+   "Error messages": [
+    "AUTH_401_MFA_REQUIRED",
+    "MFA_REQUIRED",
+    "Invalid session state",
+    "Authentication rejected (no explicit 2FA success)"
+   ],
+   "Why this happens and why it comes back": [
+    "Users in a newly synced group are not covered correctly by the Conditional Access policy or its group mapping, or an old policy is still turned on. Users are rejected even after completing MFA. It usually affects a whole group (for example contractors) after a group sync or policy change."
+   ],
+   "Team responsible": [
+    "Owning team: Identity and Access Management (IAM)",
+    "Escalate to: Major incident manager if a whole group is blocked"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Check whether the affected users share a group or role.",
+    "Collect the error code and correlation ID from the sign-in error page.",
+    "Escalate to IAM. If many users are blocked, alert the major incident manager.",
+    "Identity and Access Management (IAM)",
+    "Review the Entra ID sign-in logs for the failing Conditional Access policy.",
+    "Check the group mapping and the policy's include and exclude lists, and turn off any retired policy.",
+    "Test with the What If tool, then confirm the users can sign in."
+   ],
+   "Workarounds if the steps do not work": [
+    "No Service Desk workaround.",
+    "IAM may add a temporary exclusion with an end date.",
+    "KB00022  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00023": {
+  "id": "KB00023",
+  "meta": {
+   "KB number": "KB00023",
+   "Title": "GlobalProtect VPN - \"TLS handshake failed: certificate expired\"",
+   "Author": "David Okafor",
+   "Date issued": "April 12, 2026",
+   "Last updated": "May 14, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Desktop Support to re-enroll the certificate; Network Operations if the certificate is valid or many users are affected",
+   "Related incidents": "INC-VDA-0011, INC-VDA-0031, INC-VDA-0037, INC-VDA-0038, INC-VDA-0060"
+  },
+  "sections": {
+   "Error messages": [
+    "TLS handshake failed: certificate expired",
+    "Tunnel terminated after authentication",
+    "TLS handshake aborted after authentication",
+    "Tunnel dropped immediately after Okta approval",
+    "GP-ERR-CERT-EXPIRED",
+    "VPN-ERR-201: session_terminated_post_auth",
+    "GlobalProtect: session terminated due to certificate validation failure"
+   ],
+   "Why this happens and why it comes back": [
+    "The laptop's device certificate has expired or was not renewed. MFA succeeds, then GlobalProtect checks the device certificate and drops the tunnel within seconds. Certificates issued in the same batch expire together, so many users can hit this in the same week and it can look like a VPN outage."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Desktop Support to re-enroll the certificate; Network Operations if the certificate is valid or many users are affected"
+   ],
+   "Steps to resolve": [
+    "Confirm the pattern: MFA is approved, then the VPN disconnects within seconds.",
+    "Check the device certificate's expiry date (certlm.msc, Personal, Certificates).",
+    "If it has expired, sync the device in Company Portal and restart so Intune issues a new certificate. The laptop needs an internet connection for this.",
+    "Confirm the new certificate is present and reconnect GlobalProtect.",
+    "If the certificate is valid but the tunnel still drops, escalate to Network Operations with the GlobalProtect logs.",
+    "If many users report this at once, alert the major incident manager."
+   ],
+   "Workarounds if the steps do not work": [
+    "Work from the office network.",
+    "Use web apps that do not need the VPN.",
+    "Desktop Support can re-enroll the certificate on site.",
+    "KB00023  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00024": {
+  "id": "KB00024",
+  "meta": {
+   "KB number": "KB00024",
+   "Title": "Corporate Wi-Fi (802.1X) - \"EAP-TLS certificate expired\"",
+   "Author": "Marcus Reeves",
+   "Date issued": "April 25, 2026",
+   "Last updated": "May 15, 2026",
+   "Owning team": "Network Operations",
+   "Escalation team": "Major incident manager",
+   "Related incidents": "INC-WCI-0003, INC-WCI-0008, INC-WCI-0046, INC-WCI-0054, INC-WCI-0058"
+  },
+  "sections": {
+   "Error messages": [
+    "EAP-TLS certificate expired",
+    "802.1X authentication failed: certificate expired",
+    "EAP-TLS: certificate has expired",
+    "RADIUS: Access-Reject due to certificate validation failure"
+   ],
+   "Why this happens and why it comes back": [
+    "The server certificate on the RADIUS server or wireless controller (for example Cisco ISE) has expired, so every client fails Wi-Fi authentication. Many users in an area are affected at once, which makes it a likely major incident. It comes back every year unless renewal is monitored."
+   ],
+   "Team responsible": [
+    "Owning team: Network Operations",
+    "Escalate to: Major incident manager"
+   ],
+   "Steps to resolve": [
+    "Service Desk (Tier 1)",
+    "Check whether many users or a whole site are affected, and whether wired and guest networks still work.",
+    "Escalate to Network Operations at high priority and alert the major incident manager.",
+    "Network Operations",
+    "Renew the server certificate on the RADIUS server and wireless controller.",
+    "Make sure clients trust the new certificate's chain, then restart the services.",
+    "Confirm clients can connect. Devices that kept an old profile may need KB00025.",
+    "Turn on certificate expiry monitoring."
+   ],
+   "Workarounds if the steps do not work": [
+    "Use wired ethernet.",
+    "Use guest Wi-Fi together with the VPN.",
+    "Use a phone hotspot for urgent work.",
+    "KB00024  |  Internal use only\tPage  of"
+   ]
+  }
+ },
+ "KB00025": {
+  "id": "KB00025",
+  "meta": {
+   "KB number": "KB00025",
+   "Title": "Corporate Wi-Fi (802.1X) - \"802.1X authentication failed\"",
+   "Author": "Maria Koduya",
+   "Date issued": "April 25, 2026",
+   "Last updated": "May 15, 2026",
+   "Owning team": "Service Desk (Tier 1)",
+   "Escalation team": "Network Operations if the device still fails after the profile is redeployed",
+   "Related incidents": "INC-WCI-0002, INC-WCI-0013, INC-WCI-0025, INC-WCI-0043, INC-WCI-0062"
+  },
+  "sections": {
+   "Error messages": [
+    "802.1X authentication failed",
+    "802.1X authentication failure",
+    "802.1X timeout"
+   ],
+   "Why this happens and why it comes back": [
+    "One device's corporate Wi-Fi profile, cached credentials or client certificate is damaged or expired, causing on-and-off authentication failures for that user only. It comes back after certificate renewals or Wi-Fi profile changes."
+   ],
+   "Team responsible": [
+    "Owning team: Service Desk (Tier 1)",
+    "Escalate to: Network Operations if the device still fails after the profile is redeployed"
+   ],
+   "Steps to resolve": [
+    "Confirm only this device is affected. If many users nearby are, follow KB00024.",
+    "Have the user forget the corporate Wi-Fi network.",
+    "Check that the user's or device's certificate is still valid.",
+    "Sync the device in Company Portal to redeploy the Wi-Fi profile and certificate, then restart.",
+    "Reconnect to corporate Wi-Fi.",
+    "If it still fails, collect a WLAN report (netsh wlan show wlanreport) and escalate to Network Operations with the device's MAC address and the time of failure."
+   ],
+   "Workarounds if the steps do not work": [
+    "Use wired ethernet.",
+    "Use guest Wi-Fi together with the VPN.",
+    "KB00025  |  Internal use only\tPage  of"
+   ]
+  }
+ }
+}

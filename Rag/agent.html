@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New incident · KB assist</title>
+<style>
+:root{
+  --bg:#F2F4F7;--surface:#FFFFFF;--surface-2:#F7F9FB;--ink:#1B2430;--muted:#5B6875;--line:#D5DBE1;
+  --bar:#1F3346;--bar-ink:#FFFFFF;--accent:#2F6F8F;--accent-bg:#E3EEF3;--good:#2E7D5B;--warn:#9A6A06;--warn-bg:#FBF1DC;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#12171D;--surface:#1A2129;--surface-2:#202933;--ink:#E6EBF0;--muted:#97A3AF;--line:#2E3843;
+    --bar:#0E1620;--bar-ink:#E6EBF0;--accent:#6AAFCF;--accent-bg:#16303C;--good:#5CC59A;--warn:#E5A93A;--warn-bg:#33290F;color-scheme:dark;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
+header{background:var(--bar);color:var(--bar-ink);padding:10px 20px;display:flex;align-items:center;gap:14px}
+header strong{font-size:1.05rem}
+header span{opacity:.75;font-size:.85rem}
+main{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px;padding:16px;max-width:1300px;margin:0 auto}
+@media (max-width:900px){main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
+h1{font-size:1.15rem;margin:0 0 12px}
+h2{font-size:1rem;margin:0}
+.row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:10px;align-items:start;margin-bottom:12px}
+label{font-size:.85rem;color:var(--muted);padding-top:7px}
+input,textarea{width:100%;font:inherit;color:inherit;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+textarea{min-height:170px;resize:vertical}
+input[readonly]{background:var(--surface-2);color:var(--muted)}
+input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.hint{font-size:.8rem;color:var(--muted);margin:2px 0 0}
+.status{font-size:.8rem;color:var(--muted);min-height:1.2em;margin:4px 0 10px}
+.change{background:var(--accent-bg);border-radius:6px;padding:7px 10px;font-size:.85rem;margin-bottom:10px}
+.card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--surface-2);cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit;display:block}
+.card.best{border:2px solid var(--accent)}
+.card .top{display:flex;justify-content:space-between;gap:8px;font-size:.8rem;color:var(--muted)}
+.card .title{font-weight:600;margin:3px 0}
+.bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:6px}
+.bar span{display:block;height:100%;background:var(--accent)}
+.gap{background:var(--warn-bg);border:1px solid var(--warn);border-radius:8px;padding:10px 12px;font-size:.9rem}
+.article h3{font-size:.9rem;margin:14px 0 4px}
+.article ul,.article ol{margin:0;padding-left:1.3em}
+.article li{margin-bottom:4px;font-size:.9rem}
+.meta{font-size:.8rem;color:var(--muted)}
+button.primary{background:var(--accent);color:var(--surface);border:0;border-radius:6px;padding:7px 12px;font:inherit;font-weight:600;cursor:pointer}
+button.link{background:none;border:0;color:var(--accent);font:inherit;cursor:pointer;padding:0}
+.ai{white-space:pre-wrap;background:var(--surface-2);border:1px dashed var(--accent);border-radius:8px;padding:10px 12px;font-size:.9rem;margin-top:10px}
+.empty{color:var(--muted);font-size:.9rem}
+</style>
+</head>
+<body>
+<header><strong>Incident</strong><span>New record · KB assist</span></header>
+<main>
+  <section class="panel" aria-labelledby="formTitle">
+    <h1 id="formTitle">INC0091544</h1>
+    <div class="row"><label for="caller">Caller</label><input id="caller" placeholder="Name or username"></div>
+    <div class="row"><label for="channel">Channel</label><input id="channel" value="Phone" readonly></div>
+    <div class="row"><label for="sd">Short description</label>
+      <div><input id="sd" autocomplete="off" placeholder="One-line headline, e.g. VPN drops right after MFA approval">
+      <p class="hint">Suggestions appear as you type the headline.</p></div></div>
+    <div class="row"><label for="desc">Description</label>
+      <div><textarea id="desc" placeholder="What the caller sees, error messages, what they already tried…"></textarea>
+      <p class="hint">More detail sharpens the match. The suggestion may switch to a more accurate article.</p></div></div>
+  </section>
+
+  <aside class="panel" aria-labelledby="kbTitle">
+    <h2 id="kbTitle">Knowledge suggestions</h2>
+    <p class="status" id="status" aria-live="polite">Start typing the short description.</p>
+    <div id="change"></div>
+    <div id="cards"></div>
+    <div id="article"></div>
+  </aside>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let timer = null, lastTop = null, openKb = null, seq = 0;
+
+function ticket(){ return { short_description: $("sd").value, description: $("desc").value }; }
+
+async function refresh(){
+  const t = ticket();
+  if (t.short_description.trim().length < 4){
+    $("status").textContent = "Start typing the short description."; $("cards").innerHTML = ""; $("change").innerHTML = "";
+    lastTop = null; return;
+  }
+  const my = ++seq;
+  $("status").textContent = "Searching the knowledge base…";
+  let data;
+  try{
+    const r = await fetch("/suggest", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(t)});
+    data = await r.json();
+  }catch(e){ $("status").textContent = "Can’t reach the KB service. Is the server running?"; return; }
+  if (my !== seq) return;                                   // a newer keystroke already asked
+
+  const m = data.matches;
+  if (!m.length){
+    $("status").textContent = "No confident match.";
+    $("cards").innerHTML = `<div class="gap"><strong>No KB article covers this yet.</strong><br>
+      Troubleshoot and escalate as usual, and record exactly what fixed it in the ticket so it can become a new article after review.
+      ${data.best_unconfident ? `<p class="meta">Closest article (${Math.round(data.best_unconfident.similarity*100)}% match, below the ${Math.round(data.threshold*100)}% bar): ${esc(data.best_unconfident.kb)} ${esc(data.best_unconfident.title)}</p>` : ""}</div>`;
+    if (lastTop) $("change").innerHTML = `<div class="change">The details no longer match ${esc(lastTop)}.</div>`;
+    lastTop = null; return;
+  }
+  const top = m[0].kb;
+  if (lastTop && lastTop !== top){
+    $("change").innerHTML = `<div class="change">Updated as you typed: <strong>${esc(top)}</strong> now fits better than ${esc(lastTop)}.</div>`;
+  } else if (!lastTop) { $("change").innerHTML = ""; }
+  lastTop = top;
+  $("status").textContent = `${m.length} matching article${m.length > 1 ? "s" : ""}. Select one to see the steps.`;
+  $("cards").innerHTML = m.map((x, i) => `<button type="button" class="card${i === 0 ? " best" : ""}" data-kb="${esc(x.kb)}">
+      <div class="top"><span>${esc(x.kb)}${i === 0 ? " · Best match" : ""}</span><span>${Math.round(x.similarity*100)}% match</span></div>
+      <div class="title">${esc(x.title)}</div>
+      <div class="meta">Owning team: ${esc(x.owning_team || "not listed")}</div>
+      <div class="bar"><span style="width:${Math.round(x.similarity*100)}%"></span></div></button>`).join("");
+}
+
+async function showArticle(kb){
+  openKb = kb;
+  const r = await fetch("/kb/" + encodeURIComponent(kb));
+  if (!r.ok){ $("article").innerHTML = `<p class="empty">Couldn’t load ${esc(kb)}.</p>`; return; }
+  const a = await r.json(), s = a.sections, meta = a.meta;
+  const list = (items, tag) => items.length ? `<${tag}>${items.map(i => `<li>${esc(i)}</li>`).join("")}</${tag}>` : `<p class="empty">Not listed.</p>`;
+  const steps = s["Steps to resolve"].filter(l => !/^(Service Desk|Identity|Network|Application|Desktop|Endpoint|Messaging)/.test(l) || l.length > 60);
+  $("article").innerHTML = `<div class="article">
+    <hr style="border:0;border-top:1px solid var(--line);margin:14px 0">
+    <div class="meta">${esc(a.id)} · Last updated ${esc(meta["Last updated"] || "")} · Author ${esc(meta["Author"] || "")}</div>
+    <h2 style="margin-top:4px">${esc(meta.Title)}</h2>
+    <h3>Error messages</h3>${list(s["Error messages"], "ul")}
+    <h3>Why this happens</h3><p style="margin:0;font-size:.9rem">${esc(s["Why this happens and why it comes back"].join(" "))}</p>
+    <h3>Team responsible</h3>${list(s["Team responsible"], "ul")}
+    <h3>Steps to resolve</h3>${list(steps, "ol")}
+    <h3>Workarounds</h3>${list(s["Workarounds if the steps do not work"], "ul")}
+    <p style="margin-top:14px"><button type="button" class="primary" id="aiBtn">Summarize the fix for this ticket (AI)</button></p>
+    <div id="ai"></div></div>`;
+  $("aiBtn").addEventListener("click", summarize);
+}
+
+async function summarize(){
+  $("ai").innerHTML = `<div class="ai">Writing steps from the matching articles…</div>`;
+  try{
+    const r = await fetch("/answer", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(ticket())});
+    const d = await r.json();
+    $("ai").innerHTML = `<div class="ai">${esc(d.answer)}${d.sources.length ? `\n\nSources: ${esc(d.sources.join(", "))}` : ""}</div>`;
+  }catch(e){ $("ai").innerHTML = `<div class="ai">The AI summary failed. Check that Ollama is running.</div>`; }
+}
+
+function schedule(){ clearTimeout(timer); timer = setTimeout(refresh, 400); }
+$("sd").addEventListener("input", schedule);
+$("desc").addEventListener("input", schedule);
+$("cards").addEventListener("click", e => { const c = e.target.closest("[data-kb]"); if (c) showArticle(c.dataset.kb); });
+</script>
+</body>
+</html>
